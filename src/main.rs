@@ -35,20 +35,17 @@ fn create_edit_file(entries: &[Entry]) -> Result<PathBuf, Box<dyn std::error::Er
     Ok(PathBuf::from(edit_path))
 }
 
-fn parse_edited_entries(edit_path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
+fn parse_edited_entries(
+    edit_path: &PathBuf,
+) -> Result<(Vec<Entry>, Vec<PathBuf>), Box<dyn std::error::Error>> {
     let contents = std::fs::read_to_string(&edit_path)?;
     let mut entries = Vec::new();
     let mut paths = HashSet::new();
+    let mut new_files = Vec::new();
     for line in contents.lines() {
         let (id, path) = match line.split_once('\t') {
             Some(parts) => parts,
-            None => {
-                let line = PathBuf::from(line.trim());
-                std::fs::create_dir_all(&line.parent().unwrap())?;
-                std::fs::File::create_new(&line)?;
-                println!("Create: {}", &line.display());
-                continue;
-            }
+            None => ("0", line.trim()),
         };
         let id: usize = id.parse()?;
         let path = PathBuf::from(path);
@@ -59,9 +56,13 @@ fn parse_edited_entries(edit_path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::
             ))
             .into());
         }
-        entries.push(Entry { id, path });
+        if id == 0 {
+            new_files.push(path.clone());
+        } else {
+            entries.push(Entry { id, path });
+        }
     }
-    Ok(entries)
+    Ok((entries, new_files))
 }
 
 fn delete_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
@@ -91,6 +92,15 @@ fn rename_files(renames: &[Rename]) -> Result<(), Box<dyn std::error::Error>> {
             rename.from.display(),
             rename.to.display()
         );
+    }
+    Ok(())
+}
+
+fn create_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
+    for path in paths {
+        std::fs::create_dir_all(&path.parent().unwrap())?;
+        std::fs::File::create_new(path)?;
+        println!("Create: {}", path.display());
     }
     Ok(())
 }
@@ -130,7 +140,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg(&edit_path)
         .status()?;
 
-    let edited_entries = parse_edited_entries(&edit_path)?;
+    let (edited_entries, new_files) = parse_edited_entries(&edit_path)?;
+    create_files(&new_files)?;
     process_edited_entries(&entries, &edited_entries)?;
     Ok(())
 }
