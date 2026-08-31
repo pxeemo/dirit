@@ -1,8 +1,14 @@
+use std::collections::HashSet;
 use std::io::Write;
 
 struct Entry {
     id: usize,
     path: std::path::PathBuf,
+}
+
+struct Rename {
+    from: std::path::PathBuf,
+    to: std::path::PathBuf,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,7 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .status()?;
 
     let contents = std::fs::read_to_string("dirit.txt")?;
-    let mut editor_entries = Vec::new();
+    let mut edited_entries = Vec::new();
+    let mut paths = HashSet::new();
     for line in contents.lines() {
         let (id, path) = match line.split_once('\t') {
             Some(parts) => parts,
@@ -35,11 +42,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         let id: usize = id.parse()?;
         let path = std::path::PathBuf::from(path);
-        editor_entries.push(Entry { id, path });
+        if !paths.insert(path.clone()) {
+            return Err(std::io::Error::other(format!(
+                "Duplicate paths found: {}",
+                path.display()
+            )).into());
+        }
+        edited_entries.push(Entry { id, path });
     }
 
-    for entry in &editor_entries {
-        println!("{}\t{}", entry.id, entry.path.display())
+    let mut renames = Vec::new();
+    for entry in &entries_vec {
+        let edited = edited_entries.iter().find(|edited| edited.id == entry.id);
+        match edited {
+            Some(new) => {
+                if new.path != entry.path {
+                    renames.push(Rename {
+                        from: entry.path.clone(),
+                        to: new.path.clone(),
+                    });
+                }
+            }
+            None => println!("Delete: {}", entry.path.display()),
+        }
+    }
+
+    for rename in &renames {
+        println!(
+            "Rename: {} -> {}",
+            rename.from.display(),
+            rename.to.display()
+        );
     }
 
     Ok(())
