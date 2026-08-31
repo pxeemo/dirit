@@ -42,7 +42,13 @@ fn parse_edited_entries(edit_path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::
     for line in contents.lines() {
         let (id, path) = match line.split_once('\t') {
             Some(parts) => parts,
-            None => continue,
+            None => {
+                let line = PathBuf::from(line.trim());
+                std::fs::create_dir_all(&line.parent().unwrap())?;
+                std::fs::File::create_new(&line)?;
+                println!("Create: {}", &line.display());
+                continue;
+            }
         };
         let id: usize = id.parse()?;
         let path = PathBuf::from(path);
@@ -78,6 +84,7 @@ fn rename_files(renames: &[Rename]) -> Result<(), Box<dyn std::error::Error>> {
         std::fs::rename(&rename.from, &rename.temporary)?;
     }
     for rename in renames.iter() {
+        std::fs::create_dir_all(&rename.to.parent().unwrap())?;
         std::fs::rename(&rename.temporary, &rename.to)?;
         println!(
             "Rename: {} -> {}",
