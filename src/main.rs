@@ -22,17 +22,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    let mut file = std::fs::File::create("dirit.txt")?;
+    let edit_path = "/tmp/dirit.txt";
+    let mut file = std::fs::File::create(edit_path)?;
     for entry in &entries_vec {
         writeln!(file, "{}\t{}", entry.id, entry.path.display())?;
     }
 
     let editor = std::env::var("EDITOR")?;
     std::process::Command::new(editor)
-        .arg("dirit.txt")
+        .arg(edit_path)
         .status()?;
 
-    let contents = std::fs::read_to_string("dirit.txt")?;
+    let contents = std::fs::read_to_string(edit_path)?;
     let mut edited_entries = Vec::new();
     let mut paths = HashSet::new();
     for line in contents.lines() {
