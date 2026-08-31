@@ -1,14 +1,16 @@
 use std::collections::HashSet;
 use std::io::Write;
+use std::path::PathBuf;
 
 struct Entry {
     id: usize,
-    path: std::path::PathBuf,
+    path: PathBuf,
 }
 
 struct Rename {
-    from: std::path::PathBuf,
-    to: std::path::PathBuf,
+    from: PathBuf,
+    to: PathBuf,
+    temporary: PathBuf,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,9 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let editor = std::env::var("EDITOR")?;
-    std::process::Command::new(editor)
-        .arg(edit_path)
-        .status()?;
+    std::process::Command::new(editor).arg(edit_path).status()?;
 
     let contents = std::fs::read_to_string(edit_path)?;
     let mut edited_entries = Vec::new();
@@ -42,18 +42,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None => continue,
         };
         let id: usize = id.parse()?;
-        let path = std::path::PathBuf::from(path);
+        let path = PathBuf::from(path);
         if !paths.insert(path.clone()) {
             return Err(std::io::Error::other(format!(
                 "Duplicate paths found: {}",
                 path.display()
-            )).into());
+            ))
+            .into());
         }
         edited_entries.push(Entry { id, path });
     }
 
     let mut renames = Vec::new();
-    for entry in &entries_vec {
+    for (index, entry) in entries_vec.iter().enumerate() {
         let edited = edited_entries.iter().find(|edited| edited.id == entry.id);
         match edited {
             Some(new) => {
@@ -61,14 +62,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     renames.push(Rename {
                         from: entry.path.clone(),
                         to: new.path.clone(),
+                        temporary: PathBuf::from(format!(".dirit-temp{}", index + 1)),
                     });
                 }
             }
-            None => println!("Delete: {}", entry.path.display()),
+            None => {
+                let status = std::process::Command::new("trash-put")
+                    .arg(&entry.path)
+                    .status()?;
+
+                if !status.success() {
+                    return Err(format!("failed to trash {}", entry.path.display()).into());
+                }
+                println!("Delete: {}", entry.path.display())
+            }
         }
     }
 
     for rename in &renames {
+        std::fs::rename(&rename.from, &rename.temporary)?;
+    }
+
+    for rename in &renames {
+        std::fs::rename(&rename.temporary, &rename.to)?;
         println!(
             "Rename: {} -> {}",
             rename.from.display(),
