@@ -40,7 +40,13 @@ fn create_edit_file(
     let mut file = std::fs::File::create(edit_path)?;
     let width = entries.len().to_string().len();
     for entry in entries {
-        writeln!(file, "{:0width$}\t{}", entry.id, entry.path.display())?;
+        writeln!(
+            file,
+            "{:0width$}\t{}{}",
+            entry.id,
+            entry.path.display(),
+            if entry.path.is_dir() { "/" } else { "" }
+        )?;
     }
     for path in new_files {
         writeln!(file, "{}", path.display())?;
@@ -123,8 +129,12 @@ fn rename_files(renames: &[Rename]) -> Result<(), Box<dyn std::error::Error>> {
 
 fn create_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     for path in paths {
-        std::fs::create_dir_all(&path.parent().unwrap())?;
-        std::fs::File::create_new(path)?;
+        if path.to_str().unwrap().ends_with("/") {
+            std::fs::create_dir_all(&path)?;
+        } else {
+            std::fs::create_dir_all(&path.parent().unwrap())?;
+            std::fs::File::create_new(path)?;
+        }
         println!("Create: {}", path.display());
     }
     Ok(())
