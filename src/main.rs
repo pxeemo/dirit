@@ -7,7 +7,8 @@ use std::path::PathBuf;
 #[command(name = "dirit", version)]
 struct Args {
     paths: Vec<PathBuf>,
-    // TODO: add recursive option
+    #[arg(short, long)]
+    recursive: bool,
 }
 
 struct Entry {
@@ -156,7 +157,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut paths = HashSet::<PathBuf>::new();
     let mut new_paths = HashSet::<PathBuf>::new();
     for path in &args.paths {
-        if path.is_dir() {
+        if args.recursive && path.is_dir() {
             paths.extend(get_dir_paths(path)?);
         } else if path.exists() {
             paths.insert(path.clone());
@@ -172,7 +173,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|line| PathBuf::from(line))
             .collect::<Vec<_>>();
         for path in stdin_paths {
-            if path.exists() {
+            if args.recursive && path.is_dir() {
+                paths.extend(get_dir_paths(&path)?);
+            } else if path.exists() {
                 paths.insert(path);
             } else {
                 new_paths.insert(path);
