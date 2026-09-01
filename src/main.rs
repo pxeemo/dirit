@@ -1,8 +1,6 @@
 use clap::Parser;
 use std::collections::HashSet;
-use std::io::IsTerminal;
-use std::io::Read;
-use std::io::Write;
+use std::io::{IsTerminal, Read, Write};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -24,28 +22,28 @@ struct Rename {
     temporary: PathBuf,
 }
 
-fn get_entries(dir: &PathBuf, offset_id: usize) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
+fn get_dir_paths(dir: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let dir_list = std::fs::read_dir(dir)?;
-    let mut entries = Vec::new();
-    for (index, entry) in dir_list.enumerate() {
+    let mut paths = Vec::new();
+    for entry in dir_list {
         let entry = entry?;
-        entries.push(Entry {
-            id: index + offset_id + 1,
-            path: entry.path(),
-        });
+        paths.push(entry.path());
     }
-    Ok(entries)
+    Ok(paths)
 }
 
-fn create_edit_file(entries: &[Entry]) -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn create_edit_file(
+    entries: &[Entry],
+    new_files: &[PathBuf],
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let edit_path = "/tmp/dirit.txt";
     let mut file = std::fs::File::create(edit_path)?;
-    for entry in entries.iter() {
-        if entry.id == 0 {
-            writeln!(file, "{}", entry.path.display())?;
-        } else {
-            writeln!(file, "{}\t{}", entry.id, entry.path.display())?;
-        }
+    let width = entries.len().to_string().len();
+    for entry in entries {
+        writeln!(file, "{:0width$}\t{}", entry.id, entry.path.display())?;
+    }
+    for path in new_files {
+        writeln!(file, "{}", path.display())?;
     }
     Ok(PathBuf::from(edit_path))
 }
@@ -100,6 +98,9 @@ fn rename_files(renames: &[Rename]) -> Result<(), Box<dyn std::error::Error>> {
         std::fs::rename(&rename.from, &rename.temporary)?;
     }
     for rename in renames.iter() {
+        if rename.to.exists() {
+            return Err(format!("target path {} already exists", rename.to.display()).into());
+        }
         std::fs::create_dir_all(&rename.to.parent().unwrap())?;
         std::fs::rename(&rename.temporary, &rename.to)?;
         println!(
@@ -127,9 +128,6 @@ fn process_edited_entries(
     let mut renames = Vec::new();
     let mut deletes = Vec::new();
     for (index, entry) in entries.iter().enumerate() {
-        if entry.id == 0 {
-            continue;
-        }
         let edited = edited_entries.iter().find(|edited| edited.id == entry.id);
         match edited {
             Some(new) => {
@@ -152,46 +150,48 @@ fn process_edited_entries(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let mut entries = Vec::new();
-    let mut last_id = 0;
+    let mut paths = HashSet::<PathBuf>::new();
+    let mut new_paths = HashSet::<PathBuf>::new();
     for path in &args.paths {
         if path.is_dir() {
-            let new_entries = get_entries(&path, last_id)?;
-            last_id += new_entries.len();
-            entries.extend(new_entries);
+            paths.extend(get_dir_paths(path)?);
+        } else if path.exists() {
+            paths.insert(path.clone());
         } else {
-            entries.push(Entry {
-                id: if path.exists() {
-                    last_id += 1;
-                    last_id
-                } else {
-                    0
-                },
-                path: path.clone(),
-            });
+            new_paths.insert(path.clone());
         }
     }
     if !std::io::stdin().is_terminal() {
         let mut buffer = String::new();
         std::io::stdin().read_to_string(&mut buffer)?;
-        let paths = buffer
+        let stdin_paths = buffer
             .lines()
             .map(|line| PathBuf::from(line))
             .collect::<Vec<_>>();
-        for path in paths {
-            entries.push(Entry {
-                id: if path.exists() {
-                    last_id += 1;
-                    last_id
-                } else {
-                    0
-                },
-                path: path.clone(),
-            });
+        for path in stdin_paths {
+            if path.exists() {
+                paths.insert(path);
+            } else {
+                new_paths.insert(path);
+            }
         }
     } else if args.paths.is_empty() {
-        entries.extend(get_entries(&PathBuf::from("."), last_id)?);
+        paths.extend(get_dir_paths(&PathBuf::from("."))?);
     }
-    let edit_path = create_edit_file(&entries)?;
+    let mut sorted_paths = paths.iter().map(|p| p.clone()).collect::<Vec<PathBuf>>();
+    sorted_paths.sort();
+    let mut sorted_new_paths = new_paths
+        .iter()
+        .map(|p| p.clone())
+        .collect::<Vec<PathBuf>>();
+    sorted_new_paths.sort();
+    for (index, path) in sorted_paths.iter().enumerate() {
+        entries.push(Entry {
+            id: index + 1,
+            path: path.clone(),
+        });
+    }
+    let edit_path = create_edit_file(&entries, &sorted_new_paths)?;
     // TODO: get editor properly
     let editor = std::env::var("EDITOR")?;
     std::process::Command::new(editor)
