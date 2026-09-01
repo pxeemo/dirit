@@ -99,6 +99,7 @@ fn rename_files(renames: &[Rename]) -> Result<(), Box<dyn std::error::Error>> {
     }
     for rename in renames.iter() {
         if rename.to.exists() {
+            std::fs::rename(&rename.temporary, &rename.from)?;
             return Err(format!("target path {} already exists", rename.to.display()).into());
         }
         std::fs::create_dir_all(&rename.to.parent().unwrap())?;
