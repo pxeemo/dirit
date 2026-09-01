@@ -7,8 +7,7 @@ use std::path::PathBuf;
 #[command(name = "dirit", version)]
 struct Args {
     paths: Vec<PathBuf>,
-    #[arg(long)]
-    dry_run: bool,
+    // TODO: add recursive option
 }
 
 struct Entry {
@@ -133,10 +132,13 @@ fn process_edited_entries(
         match edited {
             Some(new) => {
                 if new.path != entry.path {
+                    let parent = entry.path.parent().ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidInput, "Path has no parent")
+                    })?;
                     renames.push(Rename {
                         from: entry.path.clone(),
                         to: new.path.clone(),
-                        temporary: PathBuf::from(format!(".dirit-temp{}", index + 1)),
+                        temporary: parent.join(format!(".dirit-temp{}", index + 1)),
                     });
                 }
             }
