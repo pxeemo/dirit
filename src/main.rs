@@ -79,16 +79,24 @@ fn parse_edited_entries(
 }
 
 fn delete_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: fallback to rm
-    for path in paths {
-        let status = std::process::Command::new("trash-put")
-            .arg(&path)
-            .status()?;
-
-        if !status.success() {
-            return Err(format!("failed to trash {}", path.display()).into());
+    if !paths.is_empty()
+        && std::process::Command::new("trash-put")
+            .args(paths)
+            .status()
+            .is_ok()
+    {
+        for path in paths {
+            println!("Trash: {}", path.display());
         }
-        println!("Delete: {}", path.display());
+    } else {
+        for path in paths {
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path)?;
+            } else if path.exists() {
+                std::fs::remove_file(&path)?;
+            }
+            println!("Delete: {}", path.display());
+        }
     }
     Ok(())
 }
