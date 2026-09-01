@@ -36,8 +36,8 @@ fn create_edit_file(
     entries: &[Entry],
     new_files: &[PathBuf],
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let edit_path = "/tmp/dirit.txt";
-    let mut file = std::fs::File::create(edit_path)?;
+    let edit_path = std::env::temp_dir().join("dirit.txt");
+    let mut file = std::fs::File::create(&edit_path)?;
     let width = entries.len().to_string().len();
     for entry in entries {
         writeln!(
