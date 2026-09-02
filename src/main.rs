@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::collections::HashSet;
 use std::io::{IsTerminal, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "dirit", version)]
@@ -22,7 +22,24 @@ struct Rename {
     temporary: PathBuf,
 }
 
-fn get_dir_paths(dir: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+fn recursive_expand_paths(
+    path: &Path,
+    paths: &mut HashSet<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if path.is_dir() {
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            recursive_expand_paths(&path, paths)
+                .unwrap_or(println!("Failed to expand path: {}", path.display()));
+        }
+    } else {
+        paths.insert(path.to_path_buf());
+    }
+    Ok(())
+}
+
+fn get_dir_list(dir: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let dir_list = std::fs::read_dir(dir)?;
     let mut paths = Vec::new();
     for entry in dir_list {
@@ -176,7 +193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut new_paths = HashSet::<PathBuf>::new();
     for path in &args.paths {
         if args.recursive && path.is_dir() {
-            paths.extend(get_dir_paths(path)?);
+            recursive_expand_paths(path, &mut paths)?;
         } else if path.exists() {
             paths.insert(path.clone());
         } else {
@@ -192,7 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<_>>();
         for path in stdin_paths {
             if args.recursive && path.is_dir() {
-                paths.extend(get_dir_paths(&path)?);
+                recursive_expand_paths(&path, &mut paths)?;
             } else if path.exists() {
                 paths.insert(path);
             } else {
@@ -200,7 +217,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     } else if args.paths.is_empty() {
-        paths.extend(get_dir_paths(&PathBuf::from("."))?);
+        if args.recursive {
+            recursive_expand_paths(&PathBuf::from("."), &mut paths)?;
+        } else {
+            paths.extend(get_dir_list(&PathBuf::from("."))?);
+        }
     }
     let mut sorted_paths = paths.iter().map(|p| p.clone()).collect::<Vec<PathBuf>>();
     sorted_paths.sort();
