@@ -2,6 +2,7 @@ use clap::Parser;
 use std::collections::HashSet;
 use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
+use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(name = "dirit", version)]
@@ -19,7 +20,7 @@ struct Entry {
 struct Rename {
     from: PathBuf,
     to: PathBuf,
-    temporary: PathBuf,
+    temporary: Option<PathBuf>,
 }
 
 fn recursive_read_dir(dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
@@ -50,7 +51,8 @@ fn create_edit_file(
     entries: &[Entry],
     new_files: &[PathBuf],
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let edit_path = std::env::temp_dir().join("dirit.txt");
+    let suffix = &Uuid::new_v4().simple().to_string()[..8];
+    let edit_path = std::env::temp_dir().join(format!("dirit{}", suffix));
     let mut file = std::fs::File::create(&edit_path)?;
     let width = entries.len().to_string().len();
     for entry in entries {
@@ -121,17 +123,22 @@ fn delete_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn rename_files(renames: &[Rename]) -> Result<(), Box<dyn std::error::Error>> {
-    for rename in renames.iter() {
-        std::fs::rename(&rename.from, &rename.temporary)?;
+fn rename_files(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>> {
+    let suffix = &Uuid::new_v4().simple().to_string()[..8];
+    for (index, rename) in renames.iter_mut().enumerate() {
+        let tempfile = rename.temporary.get_or_insert_with(|| {
+            let parent = rename.from.parent().unwrap_or(Path::new("."));
+            parent.join(format!(".dirit-tmp{}-{}", suffix, index))
+        });
+        std::fs::rename(&rename.from, tempfile)?;
     }
-    for rename in renames.iter() {
+    for rename in renames {
         if rename.to.exists() {
-            std::fs::rename(&rename.temporary, &rename.from)?;
+            std::fs::rename(rename.temporary.as_ref().unwrap(), &rename.from)?;
             return Err(format!("target path {} already exists", rename.to.display()).into());
         }
         std::fs::create_dir_all(&rename.to.parent().unwrap())?;
-        std::fs::rename(&rename.temporary, &rename.to)?;
+        std::fs::rename(rename.temporary.as_ref().unwrap(), &rename.to)?;
         println!(
             "Rename: {} -> {}",
             rename.from.display(),
@@ -160,25 +167,22 @@ fn process_edited_entries(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut renames = Vec::new();
     let mut deletes = Vec::new();
-    for (index, entry) in entries.iter().enumerate() {
+    for entry in entries {
         let edited = edited_entries.iter().find(|edited| edited.id == entry.id);
         match edited {
             Some(new) => {
                 if new.path != entry.path {
-                    let parent = entry.path.parent().ok_or_else(|| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidInput, "Path has no parent")
-                    })?;
                     renames.push(Rename {
                         from: entry.path.clone(),
                         to: new.path.clone(),
-                        temporary: parent.join(format!(".dirit-temp{}", index + 1)),
+                        temporary: None,
                     });
                 }
             }
             None => deletes.push(entry.path.clone()),
         }
     }
-    rename_files(&renames)?;
+    rename_files(&mut renames)?;
     delete_files(&deletes)?;
     Ok(())
 }
