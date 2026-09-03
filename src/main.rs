@@ -10,6 +10,8 @@ struct Args {
     paths: Vec<PathBuf>,
     #[arg(short, long)]
     recursive: bool,
+    #[arg(long)]
+    dry_run: bool,
 }
 
 struct Entry {
@@ -100,7 +102,13 @@ fn parse_edited_entries(
     Ok((entries, new_files))
 }
 
-fn delete_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
+fn delete_files(paths: &[PathBuf], dry_run: &bool) -> Result<(), Box<dyn std::error::Error>> {
+    if dry_run.clone() {
+        for path in paths {
+            println!("Delete: {}", path.display());
+        }
+        return Ok(());
+    }
     if !paths.is_empty()
         && std::process::Command::new("trash-put")
             .args(paths)
@@ -123,14 +131,22 @@ fn delete_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn rename_files(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>> {
+fn rename_files(renames: &mut [Rename], dry_run: &bool) -> Result<(), Box<dyn std::error::Error>> {
     let suffix = &Uuid::new_v4().simple().to_string()[..8];
+    for rename in renames.iter() {
+        println!(
+            "Rename: {} -> {}",
+            rename.from.display(),
+            rename.to.display()
+        );
+    }
+    if dry_run.clone() {
+        return Ok(());
+    }
     for (index, rename) in renames.iter_mut().enumerate() {
-        let tempfile = rename.temporary.get_or_insert_with(|| {
-            let parent = rename.from.parent().unwrap_or(Path::new("."));
-            parent.join(format!(".dirit-tmp{}-{}", suffix, index))
-        });
-        std::fs::rename(&rename.from, tempfile)?;
+        let parent = rename.from.parent().unwrap_or(Path::new("."));
+        let tempfile = parent.join(format!(".dirit-tmp{}-{}", suffix, index));
+        std::fs::rename(&rename.from, rename.temporary.insert(tempfile))?;
     }
     for rename in renames {
         if rename.to.exists() {
@@ -139,22 +155,19 @@ fn rename_files(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>
         }
         std::fs::create_dir_all(&rename.to.parent().unwrap())?;
         std::fs::rename(rename.temporary.as_ref().unwrap(), &rename.to)?;
-        println!(
-            "Rename: {} -> {}",
-            rename.from.display(),
-            rename.to.display()
-        );
     }
     Ok(())
 }
 
-fn create_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
+fn create_files(paths: &[PathBuf], dry_run: &bool) -> Result<(), Box<dyn std::error::Error>> {
     for path in paths {
-        if path.to_str().unwrap().ends_with("/") {
-            std::fs::create_dir_all(&path)?;
-        } else {
-            std::fs::create_dir_all(&path.parent().unwrap())?;
-            std::fs::File::create_new(path)?;
+        if !dry_run {
+            if path.to_str().unwrap().ends_with("/") {
+                std::fs::create_dir_all(&path)?;
+            } else {
+                std::fs::create_dir_all(&path.parent().unwrap())?;
+                std::fs::File::create_new(path)?;
+            }
         }
         println!("Create: {}", path.display());
     }
@@ -164,6 +177,7 @@ fn create_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
 fn process_edited_entries(
     entries: &[Entry],
     edited_entries: &[Entry],
+    dry_run: &bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut renames = Vec::new();
     let mut deletes = Vec::new();
@@ -182,8 +196,8 @@ fn process_edited_entries(
             None => deletes.push(entry.path.clone()),
         }
     }
-    rename_files(&mut renames)?;
-    delete_files(&deletes)?;
+    rename_files(&mut renames, &dry_run)?;
+    delete_files(&deletes, &dry_run)?;
     Ok(())
 }
 
@@ -245,7 +259,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .status()?;
 
     let (edited_entries, new_files) = parse_edited_entries(&edit_path)?;
-    create_files(&new_files)?;
-    process_edited_entries(&entries, &edited_entries)?;
+    create_files(&new_files, &args.dry_run)?;
+    process_edited_entries(&entries, &edited_entries, &args.dry_run)?;
     Ok(())
 }
