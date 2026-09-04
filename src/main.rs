@@ -201,9 +201,9 @@ fn process_edited_entries(
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
-    let mut entries = Vec::new();
+fn process_path_args(
+    args: &Args,
+) -> Result<(Vec<PathBuf>, Vec<PathBuf>), Box<dyn std::error::Error>> {
     let mut paths = HashSet::<PathBuf>::new();
     let mut new_paths = HashSet::<PathBuf>::new();
     for path in &args.paths {
@@ -245,13 +245,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|p| p.clone())
         .collect::<Vec<PathBuf>>();
     sorted_new_paths.sort();
-    for (index, path) in sorted_paths.iter().enumerate() {
+    Ok((sorted_paths, sorted_new_paths))
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+    let mut entries = Vec::new();
+    let (paths, new_paths) = process_path_args(&args)?;
+    for (index, path) in paths.iter().enumerate() {
         entries.push(Entry {
             id: index + 1,
             path: path.clone(),
         });
     }
-    let edit_path = create_edit_file(&entries, &sorted_new_paths)?;
+    let edit_path = create_edit_file(&entries, &new_paths)?;
     // TODO: get editor properly
     let editor = std::env::var("EDITOR")?;
     std::process::Command::new(editor)
