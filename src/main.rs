@@ -236,7 +236,7 @@ fn process_path_args(
     let mut paths = HashSet::<PathBuf>::new();
     let mut new_paths = HashSet::<PathBuf>::new();
     for path in &args.paths {
-        if args.recursive && path.is_dir() {
+        if args.recursive && path.is_dir() && !path.is_symlink() {
             paths.extend(recursive_read_dir(path)?);
         } else if path.exists() {
             paths.insert(path.clone());
@@ -252,7 +252,7 @@ fn process_path_args(
             .map(|line| PathBuf::from(line))
             .collect::<Vec<_>>();
         for path in stdin_paths {
-            if args.recursive && path.is_dir() {
+            if args.recursive && path.is_dir() && !path.is_symlink() {
                 paths.extend(recursive_read_dir(&path)?);
             } else if path.exists() {
                 paths.insert(path);
