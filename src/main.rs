@@ -23,6 +23,7 @@ struct Rename {
     from: PathBuf,
     to: PathBuf,
     temporary: Option<PathBuf>,
+    completed: bool,
 }
 
 fn recursive_read_dir(dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
@@ -132,13 +133,27 @@ fn delete_files(paths: &[PathBuf], dry_run: bool) -> Result<(), Box<dyn std::err
 }
 
 fn rename_files(renames: &mut [Rename], dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn rollback(renames: &[Rename]) {
+        for rename in renames {
+            // TODO: don't ignore rollback errors
+            if rename.completed {
+                let _ = std::fs::rename(&rename.to, &rename.from);
+            } else if let Some(temporary) = &rename.temporary {
+                let _ = std::fs::rename(temporary, &rename.from);
+            }
+        }
+    }
     let suffix = &Uuid::new_v4().simple().to_string()[..8];
+    let sources: HashSet<&PathBuf> = renames.iter().map(|r| &r.from).collect();
     for rename in renames.iter() {
         println!(
             "Rename: {} -> {}",
             rename.from.display(),
             rename.to.display()
         );
+        if rename.to.exists() && !sources.contains(&rename.to) {
+            return Err(format!("target path {} already exists", rename.to.display()).into());
+        }
     }
     if dry_run {
         return Ok(());
@@ -146,15 +161,28 @@ fn rename_files(renames: &mut [Rename], dry_run: bool) -> Result<(), Box<dyn std
     for (index, rename) in renames.iter_mut().enumerate() {
         let parent = rename.from.parent().unwrap_or(Path::new("."));
         let tempfile = parent.join(format!(".dirit-tmp{}-{}", suffix, index));
-        std::fs::rename(&rename.from, rename.temporary.insert(tempfile))?;
-    }
-    for rename in renames {
-        if rename.to.exists() {
-            std::fs::rename(rename.temporary.as_ref().unwrap(), &rename.from)?;
-            return Err(format!("target path {} already exists", rename.to.display()).into());
+        match std::fs::rename(&rename.from, &tempfile) {
+            Ok(_) => rename.temporary = Some(tempfile),
+            Err(e) => {
+                rollback(renames);
+                return Err(e.into());
+            }
         }
-        std::fs::create_dir_all(&rename.to.parent().unwrap())?;
-        std::fs::rename(rename.temporary.as_ref().unwrap(), &rename.to)?;
+    }
+    for rename in renames.iter_mut() {
+        if let Some(parent) = rename.to.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                rollback(renames);
+                return Err(e.into());
+            }
+        }
+        match std::fs::rename(rename.temporary.as_ref().unwrap(), &rename.to) {
+            Ok(()) => rename.completed = true,
+            Err(e) => {
+                rollback(renames);
+                return Err(e.into());
+            }
+        }
     }
     Ok(())
 }
@@ -190,6 +218,7 @@ fn process_edited_entries(
                         from: entry.path.clone(),
                         to: new.path.clone(),
                         temporary: None,
+                        completed: false,
                     });
                 }
             }
