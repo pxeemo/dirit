@@ -277,6 +277,26 @@ fn process_path_args(
     Ok((sorted_paths, sorted_new_paths))
 }
 
+fn run_editor(edit_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let editor = std::env::var("VISUAL")
+        .or(std::env::var("EDITOR"))
+        .or_else(|_| {
+            for editor in ["nvim", "vim", "micro", "nano", "vi"] {
+                if which::which(editor).is_ok() {
+                    return Ok(editor.to_string());
+                }
+            }
+            Err("$VISUAL and $EDITOR are empty and no suitable editor was found.")
+        })?;
+    let parts = shell_words::split(&editor)?;
+    let (program, args) = parts.split_first().ok_or("editor is empty")?;
+    std::process::Command::new(program)
+        .args(args)
+        .arg(&edit_path)
+        .status()?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let mut entries = Vec::new();
@@ -287,12 +307,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             path: path.clone(),
         });
     }
+
     let edit_path = create_edit_file(&entries, &new_paths)?;
-    // TODO: get editor properly
-    let editor = std::env::var("EDITOR")?;
-    std::process::Command::new(editor)
-        .arg(&edit_path)
-        .status()?;
+    run_editor(&edit_path)?;
 
     let (edited_entries, new_files) = parse_edited_entries(&edit_path)?;
     create_files(&new_files, &args.dry_run)?;
