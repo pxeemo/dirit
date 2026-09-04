@@ -102,8 +102,8 @@ fn parse_edited_entries(
     Ok((entries, new_files))
 }
 
-fn delete_files(paths: &[PathBuf], dry_run: &bool) -> Result<(), Box<dyn std::error::Error>> {
-    if dry_run.clone() {
+fn delete_files(paths: &[PathBuf], dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if dry_run {
         for path in paths {
             println!("Delete: {}", path.display());
         }
@@ -131,7 +131,7 @@ fn delete_files(paths: &[PathBuf], dry_run: &bool) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-fn rename_files(renames: &mut [Rename], dry_run: &bool) -> Result<(), Box<dyn std::error::Error>> {
+fn rename_files(renames: &mut [Rename], dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
     let suffix = &Uuid::new_v4().simple().to_string()[..8];
     for rename in renames.iter() {
         println!(
@@ -140,7 +140,7 @@ fn rename_files(renames: &mut [Rename], dry_run: &bool) -> Result<(), Box<dyn st
             rename.to.display()
         );
     }
-    if dry_run.clone() {
+    if dry_run {
         return Ok(());
     }
     for (index, rename) in renames.iter_mut().enumerate() {
@@ -177,7 +177,7 @@ fn create_files(paths: &[PathBuf], dry_run: &bool) -> Result<(), Box<dyn std::er
 fn process_edited_entries(
     entries: &[Entry],
     edited_entries: &[Entry],
-    dry_run: &bool,
+    dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut renames = Vec::new();
     let mut deletes = Vec::new();
@@ -196,8 +196,8 @@ fn process_edited_entries(
             None => deletes.push(entry.path.clone()),
         }
     }
-    rename_files(&mut renames, &dry_run)?;
-    delete_files(&deletes, &dry_run)?;
+    rename_files(&mut renames, dry_run)?;
+    delete_files(&deletes, dry_run)?;
     Ok(())
 }
 
@@ -260,6 +260,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (edited_entries, new_files) = parse_edited_entries(&edit_path)?;
     create_files(&new_files, &args.dry_run)?;
-    process_edited_entries(&entries, &edited_entries, &args.dry_run)?;
+    process_edited_entries(&entries, &edited_entries, args.dry_run)?;
     Ok(())
 }
