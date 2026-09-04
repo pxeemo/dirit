@@ -104,21 +104,21 @@ fn parse_edited_entries(
 }
 
 fn delete_files(paths: &[PathBuf], dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
-    if dry_run {
-        for path in paths {
-            println!("Delete: {}", path.display());
-        }
+    let has_trash = which::which("trash-put").is_ok();
+    for path in paths {
+        println!(
+            "{}: {}",
+            if has_trash { "Trash" } else { "Delete" },
+            path.display()
+        );
+    }
+    if dry_run || paths.is_empty() {
         return Ok(());
     }
-    if !paths.is_empty()
-        && std::process::Command::new("trash-put")
+    if has_trash {
+        std::process::Command::new("trash-put")
             .args(paths)
-            .status()
-            .is_ok()
-    {
-        for path in paths {
-            println!("Trash: {}", path.display());
-        }
+            .status()?;
     } else {
         for path in paths {
             if path.is_dir() {
@@ -126,7 +126,6 @@ fn delete_files(paths: &[PathBuf], dry_run: bool) -> Result<(), Box<dyn std::err
             } else if path.exists() {
                 std::fs::remove_file(&path)?;
             }
-            println!("Delete: {}", path.display());
         }
     }
     Ok(())
