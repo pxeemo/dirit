@@ -344,14 +344,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         dry_run: args.dry_run,
     });
 
-    let mut entries = Vec::new();
     let (paths, new_paths) = process_path_args(&args)?;
-    for (index, path) in paths.iter().enumerate() {
-        entries.push(Entry {
+    let entries: Vec<Entry> = paths
+        .iter()
+        .enumerate()
+        .map(|(index, path)| Entry {
             id: index + 1,
             path: path.clone(),
-        });
-    }
+        })
+        .collect();
 
     let edit_path = create_edit_file(&entries, &new_paths)?;
     run_editor(&edit_path)?;
