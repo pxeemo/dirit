@@ -35,7 +35,15 @@ struct Copy {
 
 fn recursive_read_dir(dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
     let mut paths = HashSet::new();
-    for entry in std::fs::read_dir(dir)? {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            eprintln!("Permission denied: {}", dir.display());
+            return Ok(paths);
+        }
+        Err(e) => return Err(Box::new(e)),
+    };
+    for entry in entries {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() && !path.is_symlink() {
