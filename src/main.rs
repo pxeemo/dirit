@@ -16,6 +16,7 @@ struct Args {
     dry_run: bool,
 }
 
+#[derive(Debug)]
 struct Entry {
     id: usize,
     path: PathBuf,
@@ -54,7 +55,7 @@ fn get_dir_list(dir: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn std::error::Error
 
 fn create_edit_file(
     entries: &[Entry],
-    new_files: &[PathBuf],
+    new_paths: &[PathBuf],
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let suffix = &Uuid::new_v4().simple().to_string()[..8];
     let edit_path = std::env::temp_dir().join(format!("dirit{}", suffix));
@@ -69,19 +70,16 @@ fn create_edit_file(
             if entry.path.is_dir() { "/" } else { "" }
         )?;
     }
-    for path in new_files {
+    for path in new_paths {
         writeln!(file, "{}", path.display())?;
     }
     Ok(PathBuf::from(edit_path))
 }
 
-fn parse_edited_entries(
-    edit_path: &PathBuf,
-) -> Result<(Vec<Entry>, Vec<PathBuf>), Box<dyn std::error::Error>> {
+fn parse_edited_entries(edit_path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
     let contents = std::fs::read_to_string(&edit_path)?;
     let mut entries = Vec::new();
     let mut paths = HashSet::new();
-    let mut new_files = Vec::new();
     for line in contents.lines() {
         let (id, path) = match line.split_once('\t') {
             Some(parts) => parts,
@@ -96,21 +94,17 @@ fn parse_edited_entries(
             ))
             .into());
         }
-        if id == 0 {
-            new_files.push(path.clone());
-        } else {
-            entries.push(Entry { id, path });
-        }
+        entries.push(Entry { id, path });
     }
-    Ok((entries, new_files))
+    Ok(entries)
 }
 
-fn delete_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
+fn remove_paths(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     let has_trash = which::which("trash-put").is_ok();
     for path in paths {
         println!(
             "{}: {}",
-            if has_trash { "Trash" } else { "Delete" },
+            if has_trash { "Trash" } else { "Remove" },
             path.display()
         );
     }
@@ -133,7 +127,7 @@ fn delete_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn rename_files(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>> {
+fn rename_paths(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>> {
     fn rollback(renames: &[Rename]) {
         for rename in renames {
             // TODO: don't ignore rollback errors
@@ -188,7 +182,7 @@ fn rename_files(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-fn create_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
+fn create_paths(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     for path in paths {
         if !config::get().dry_run {
             if path.to_str().unwrap().ends_with("/") {
@@ -208,7 +202,7 @@ fn process_edited_entries(
     edited_entries: &[Entry],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut renames = Vec::new();
-    let mut deletes = Vec::new();
+    let mut removes = Vec::new();
     for entry in entries {
         let edited = edited_entries.iter().find(|edited| edited.id == entry.id);
         match edited {
@@ -222,11 +216,19 @@ fn process_edited_entries(
                     });
                 }
             }
-            None => deletes.push(entry.path.clone()),
+            None => removes.push(entry.path.clone()),
         }
     }
-    rename_files(&mut renames)?;
-    delete_files(&deletes)?;
+
+    let new_paths: Vec<PathBuf> = edited_entries
+        .iter()
+        .filter(|e| e.id == 0)
+        .map(|e| e.path.clone())
+        .collect();
+
+    create_paths(&new_paths)?;
+    rename_paths(&mut renames)?;
+    remove_paths(&removes)?;
     Ok(())
 }
 
@@ -317,8 +319,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let edit_path = create_edit_file(&entries, &new_paths)?;
     run_editor(&edit_path)?;
 
-    let (edited_entries, new_files) = parse_edited_entries(&edit_path)?;
-    create_files(&new_files)?;
+    let edited_entries = parse_edited_entries(&edit_path)?;
     process_edited_entries(&entries, &edited_entries)?;
     Ok(())
 }
