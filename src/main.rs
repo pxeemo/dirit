@@ -61,8 +61,7 @@ fn create_edit_file(
     entries: &[Entry],
     new_paths: &[PathBuf],
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let suffix = &Uuid::new_v4().simple().to_string()[..8];
-    let edit_path = std::env::temp_dir().join(format!("dirit{}", suffix));
+    let edit_path = std::env::temp_dir().join(format!(".dirit-{}", config::get().puid));
     let mut file = std::fs::File::create(&edit_path)?;
     let width = entries.len().to_string().len();
     for entry in entries {
@@ -142,7 +141,6 @@ fn rename_paths(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>
             }
         }
     }
-    let suffix = &Uuid::new_v4().simple().to_string()[..8];
     let sources: HashSet<&PathBuf> = renames.iter().map(|r| &r.from).collect();
     for rename in renames.iter() {
         println!(
@@ -159,7 +157,7 @@ fn rename_paths(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>
     }
     for (index, rename) in renames.iter_mut().enumerate() {
         let parent = rename.from.parent().unwrap_or(Path::new("."));
-        let tempfile = parent.join(format!(".dirit-tmp{}-{}", suffix, index));
+        let tempfile = parent.join(format!(".dirit-{}-tmp{}", config::get().puid, index));
         match std::fs::rename(&rename.from, &tempfile) {
             Ok(_) => rename.temporary = Some(tempfile),
             Err(e) => {
@@ -334,7 +332,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     config::init(config::Config {
-        quiet: false,
+        puid: Uuid::new_v4().simple().to_string()[..8].to_string(),
         dry_run: args.dry_run,
     });
 
@@ -352,5 +350,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let edited_entries = parse_edited_entries(&edit_path)?;
     process_edited_entries(&entries, &edited_entries)?;
+
+    let _ = std::fs::remove_file(edit_path);
     Ok(())
 }

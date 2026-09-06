@@ -2,7 +2,7 @@ use std::sync::OnceLock;
 
 #[derive(Debug)]
 pub struct Config {
-    pub quiet: bool,
+    pub puid: String,
     pub dry_run: bool,
 }
 
