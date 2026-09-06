@@ -1,3 +1,5 @@
+mod config;
+
 use clap::Parser;
 use std::collections::HashSet;
 use std::io::{IsTerminal, Read, Write};
@@ -103,7 +105,7 @@ fn parse_edited_entries(
     Ok((entries, new_files))
 }
 
-fn delete_files(paths: &[PathBuf], dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn delete_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     let has_trash = which::which("trash-put").is_ok();
     for path in paths {
         println!(
@@ -112,7 +114,7 @@ fn delete_files(paths: &[PathBuf], dry_run: bool) -> Result<(), Box<dyn std::err
             path.display()
         );
     }
-    if dry_run || paths.is_empty() {
+    if config::get().dry_run || paths.is_empty() {
         return Ok(());
     }
     if has_trash {
@@ -131,7 +133,7 @@ fn delete_files(paths: &[PathBuf], dry_run: bool) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-fn rename_files(renames: &mut [Rename], dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn rename_files(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>> {
     fn rollback(renames: &[Rename]) {
         for rename in renames {
             // TODO: don't ignore rollback errors
@@ -154,7 +156,7 @@ fn rename_files(renames: &mut [Rename], dry_run: bool) -> Result<(), Box<dyn std
             return Err(format!("target path {} already exists", rename.to.display()).into());
         }
     }
-    if dry_run {
+    if config::get().dry_run {
         return Ok(());
     }
     for (index, rename) in renames.iter_mut().enumerate() {
@@ -186,9 +188,9 @@ fn rename_files(renames: &mut [Rename], dry_run: bool) -> Result<(), Box<dyn std
     Ok(())
 }
 
-fn create_files(paths: &[PathBuf], dry_run: &bool) -> Result<(), Box<dyn std::error::Error>> {
+fn create_files(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     for path in paths {
-        if !dry_run {
+        if !config::get().dry_run {
             if path.to_str().unwrap().ends_with("/") {
                 std::fs::create_dir_all(&path)?;
             } else {
@@ -204,7 +206,6 @@ fn create_files(paths: &[PathBuf], dry_run: &bool) -> Result<(), Box<dyn std::er
 fn process_edited_entries(
     entries: &[Entry],
     edited_entries: &[Entry],
-    dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut renames = Vec::new();
     let mut deletes = Vec::new();
@@ -224,8 +225,8 @@ fn process_edited_entries(
             None => deletes.push(entry.path.clone()),
         }
     }
-    rename_files(&mut renames, dry_run)?;
-    delete_files(&deletes, dry_run)?;
+    rename_files(&mut renames)?;
+    delete_files(&deletes)?;
     Ok(())
 }
 
@@ -298,6 +299,12 @@ fn run_editor(edit_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    config::init(config::Config {
+        quiet: false,
+        dry_run: args.dry_run,
+    });
+
     let mut entries = Vec::new();
     let (paths, new_paths) = process_path_args(&args)?;
     for (index, path) in paths.iter().enumerate() {
@@ -311,7 +318,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_editor(&edit_path)?;
 
     let (edited_entries, new_files) = parse_edited_entries(&edit_path)?;
-    create_files(&new_files, &args.dry_run)?;
-    process_edited_entries(&entries, &edited_entries, args.dry_run)?;
+    create_files(&new_files)?;
+    process_edited_entries(&entries, &edited_entries)?;
     Ok(())
 }
