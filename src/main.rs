@@ -16,7 +16,6 @@ struct Args {
     dry_run: bool,
 }
 
-#[derive(Debug)]
 struct Entry {
     id: usize,
     path: PathBuf,
@@ -27,6 +26,11 @@ struct Rename {
     to: PathBuf,
     temporary: Option<PathBuf>,
     completed: bool,
+}
+
+struct Copy {
+    from: PathBuf,
+    to: PathBuf,
 }
 
 fn recursive_read_dir(dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
@@ -182,6 +186,16 @@ fn rename_paths(renames: &mut [Rename]) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
+fn copy_paths(copies: &[Copy]) -> Result<(), Box<dyn std::error::Error>> {
+    for copy in copies {
+        if !config::get().dry_run {
+            std::fs::copy(&copy.from, &copy.to)?;
+        }
+        println!("Copy: {} -> {}", copy.from.display(), copy.to.display());
+    }
+    Ok(())
+}
+
 fn create_paths(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     for path in paths {
         if !config::get().dry_run {
@@ -203,32 +217,49 @@ fn process_edited_entries(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut renames = Vec::new();
     let mut removes = Vec::new();
-    for entry in entries {
-        let edited = edited_entries.iter().find(|edited| edited.id == entry.id);
-        match edited {
-            Some(new) => {
-                if new.path != entry.path {
-                    renames.push(Rename {
-                        from: entry.path.clone(),
-                        to: new.path.clone(),
-                        temporary: None,
-                        completed: false,
-                    });
-                }
-            }
-            None => removes.push(entry.path.clone()),
-        }
-    }
-
+    let mut copies = Vec::new();
     let new_paths: Vec<PathBuf> = edited_entries
         .iter()
         .filter(|e| e.id == 0)
         .map(|e| e.path.clone())
         .collect();
 
+    for entry in entries {
+        let matched_entries: Vec<&Entry> =
+            edited_entries.iter().filter(|e| e.id == entry.id).collect();
+
+        if matched_entries.is_empty() {
+            removes.push(entry.path.clone());
+            continue;
+        }
+
+        let mut found_original = false;
+        for matched_entry in &matched_entries {
+            if matched_entry.path == entry.path {
+                found_original = true;
+            } else {
+                copies.push(Copy {
+                    from: entry.path.clone(),
+                    to: matched_entry.path.clone(),
+                });
+            }
+        }
+        if !found_original {
+            let last_copy = copies.pop().unwrap();
+            renames.push(Rename {
+                from: last_copy.from,
+                to: last_copy.to,
+                temporary: None,
+                completed: false,
+            });
+        }
+    }
+
+    // order is important
+    remove_paths(&removes)?;
+    copy_paths(&copies)?;
     create_paths(&new_paths)?;
     rename_paths(&mut renames)?;
-    remove_paths(&removes)?;
     Ok(())
 }
 
