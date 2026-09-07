@@ -6,48 +6,59 @@ mod model;
 mod operations;
 
 use clap::Parser;
-use model::Entry;
+use model::{EditedEntries, Entries};
 use uuid::Uuid;
 
 fn process_edited_entries(
-    entries: &[Entry],
-    edited_entries: &[Entry],
+    entries: &Entries,
+    edited_entries: &EditedEntries,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut renames = Vec::new();
     let mut removes = Vec::new();
     let mut copies = Vec::new();
 
-    let new_paths: Vec<std::path::PathBuf> = edited_entries
-        .iter()
-        .filter(|e| e.id == 0)
-        .map(|e| e.path.clone())
-        .collect();
+    let new_paths = edited_entries.get(&0).cloned().unwrap_or_default();
 
-    for entry in entries {
-        let matched_entries: Vec<&Entry> = edited_entries
-            .iter()
-            .filter(|e| e.id == entry.id)
-            .collect();
+    for (entry_id, entry_paths) in entries {
+        let edited_paths = edited_entries.get(&entry_id).cloned().unwrap_or_default();
 
-        if matched_entries.is_empty() {
-            removes.push(entry.path.clone());
+        // if entry not found in edited entries, remove it
+        if edited_paths.is_empty() {
+            removes.push(entry_paths.clone());
             continue;
         }
 
         let mut found_original = false;
 
-        for matched_entry in &matched_entries {
-            if matched_entry.path == entry.path {
+        for path in &edited_paths {
+            if path == entry_paths {
                 found_original = true;
             } else {
                 copies.push(model::Copy {
-                    from: entry.path.clone(),
-                    to: matched_entry.path.clone(),
+                    from: entry_paths.clone(),
+                    to: path.clone(),
                 });
             }
         }
 
+        /*
+         * if the original path is found,
+         * it means the entry is not renamed or copied
+         *
+         * otherwise, the entry is renamed
+         * so it must be removed from the copies
+         * and be added to the renames list after the loop
+         */
         if !found_original {
+            /*
+             * if there were more than one copy
+             * then the entries except the last one will be copied
+             * and then the last entry will be renamed
+             *
+             * if there was only one copy,
+             * then it won't be copied at all
+             * and the entry will be renamed directly
+             */
             let last_copy = copies.pop().unwrap();
 
             renames.push(model::Rename {
@@ -59,7 +70,8 @@ fn process_edited_entries(
         }
     }
 
-    // order is important
+    // removes must happen before any other operations
+    // copies must happen before renames
     operations::remove_paths(&removes)?;
     operations::copy_paths(&copies)?;
     operations::create_paths(&new_paths)?;
@@ -78,13 +90,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (paths, new_paths) = fs::process_path_args(&args)?;
 
-    let entries: Vec<Entry> = paths
+    let entries: Entries = paths
         .iter()
         .enumerate()
-        .map(|(index, path)| Entry {
-            id: index + 1,
-            path: path.clone(),
-        })
+        .map(|(index, path)| (index + 1, path.clone()))
         .collect();
 
     let edit_path = editor::create_edit_file(&entries, &new_paths)?;

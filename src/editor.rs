@@ -1,28 +1,30 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     io::Write,
     path::{Path, PathBuf},
 };
 
-use crate::{config, model::Entry};
+use crate::{
+    config,
+    model::{EditedEntries, Entries},
+};
 
 pub fn create_edit_file(
-    entries: &[Entry],
+    entries: &Entries,
     new_paths: &[PathBuf],
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let edit_path =
-        std::env::temp_dir().join(format!(".dirit-{}", config::get().puid));
+    let edit_path = std::env::temp_dir().join(format!(".dirit-{}", config::get().puid));
 
     let mut file = std::fs::File::create(&edit_path)?;
     let width = entries.len().to_string().len();
 
-    for entry in entries {
+    for (id, path) in entries {
         writeln!(
             file,
             "{:0width$}\t{}{}",
-            entry.id,
-            entry.path.display(),
-            if entry.path.is_dir() { "/" } else { "" }
+            id,
+            path.display(),
+            if path.is_dir() { "/" } else { "" }
         )?;
     }
 
@@ -33,11 +35,9 @@ pub fn create_edit_file(
     Ok(PathBuf::from(edit_path))
 }
 
-pub fn parse_edited_entries(
-    edit_path: &Path,
-) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
+pub fn parse_edited_entries(edit_path: &Path) -> Result<EditedEntries, Box<dyn std::error::Error>> {
     let contents = std::fs::read_to_string(edit_path)?;
-    let mut entries = Vec::new();
+    let mut entries: EditedEntries = BTreeMap::new();
     let mut paths = HashSet::new();
 
     for line in contents.lines() {
@@ -57,15 +57,18 @@ pub fn parse_edited_entries(
             .into());
         }
 
-        entries.push(Entry { id, path });
+        match entries.get_mut(&id) {
+            Some(existing) => existing.push(path),
+            None => {
+                entries.insert(id, vec![path]);
+            }
+        }
     }
 
     Ok(entries)
 }
 
-pub fn run_editor(
-    edit_path: &Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_editor(edit_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let editor = std::env::var("VISUAL")
         .or(std::env::var("EDITOR"))
         .or_else(|_| {

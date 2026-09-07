@@ -35,7 +35,7 @@ pub fn recursive_read_dir(
 }
 
 pub fn get_dir_list(
-    dir: &PathBuf,
+    dir: &Path,
 ) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let dir_list = std::fs::read_dir(dir)?;
     let mut paths = Vec::new();

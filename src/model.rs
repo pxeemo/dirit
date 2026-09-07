@@ -1,9 +1,7 @@
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
-pub struct Entry {
-    pub id: usize,
-    pub path: PathBuf,
-}
+pub type Entries = BTreeMap<usize, PathBuf>;
+pub type EditedEntries = BTreeMap<usize, Vec<PathBuf>>;
 
 pub struct Rename {
     pub from: PathBuf,
