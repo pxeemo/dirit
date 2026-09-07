@@ -9,9 +9,13 @@ pub struct Config {
 pub static CONFIG: OnceLock<Config> = OnceLock::new();
 
 pub fn init(config: Config) {
-    CONFIG.set(config).expect("Config already initialized")
+    CONFIG
+        .set(config)
+        .expect("Config already initialized");
 }
 
 pub fn get() -> &'static Config {
-    CONFIG.get().expect("Config not initialized")
+    CONFIG
+        .get()
+        .expect("Config not initialized")
 }
