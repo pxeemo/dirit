@@ -19,12 +19,13 @@ pub fn create_edit_file(
     let width = entries.len().to_string().len();
 
     for (id, path) in entries {
+        let trailing_slash = path.is_dir() && !path.to_str().unwrap().ends_with("/");
         writeln!(
             file,
             "{:0width$}\t{}{}",
             id,
             path.display(),
-            if path.is_dir() { "/" } else { "" }
+            if trailing_slash { "/" } else { "" }
         )?;
     }
 
