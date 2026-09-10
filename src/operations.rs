@@ -121,6 +121,7 @@ pub fn copy_paths(
 ) -> Result<(), Box<dyn std::error::Error>> {
     for copy in copies {
         if !config::get().dry_run {
+            std::fs::create_dir_all(&copy.to.parent().unwrap())?;
             std::fs::copy(&copy.from, &copy.to)?;
         }
 
