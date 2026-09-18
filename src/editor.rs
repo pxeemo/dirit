@@ -7,6 +7,7 @@ use std::{
 use crate::{
     config,
     model::{EditedEntries, Entries},
+    utils::expand_tilde,
 };
 
 pub fn create_edit_file(
@@ -48,7 +49,7 @@ pub fn parse_edited_entries(edit_path: &Path) -> Result<EditedEntries, Box<dyn s
         };
 
         let id: usize = id.parse()?;
-        let path = PathBuf::from(path);
+        let path = PathBuf::from(expand_tilde(path));
 
         if !paths.insert(path.clone()) {
             return Err(std::io::Error::other(format!(

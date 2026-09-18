@@ -4,11 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::cli::Args;
+use crate::{cli::Args, utils::shrink_home};
 
-pub fn recursive_read_dir(
-    dir: &Path,
-) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
+pub fn recursive_read_dir(dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
     let mut paths = HashSet::new();
 
     let entries = match std::fs::read_dir(dir) {
@@ -22,21 +20,19 @@ pub fn recursive_read_dir(
 
     for entry in entries {
         let entry = entry?;
-        let path = entry.path();
+        let path = shrink_home(&entry.path());
 
         if path.is_dir() && !path.is_symlink() {
             paths.extend(recursive_read_dir(&path)?);
         } else {
-            paths.insert(path.to_path_buf());
+            paths.insert(path);
         }
     }
 
     Ok(paths)
 }
 
-pub fn get_dir_list(
-    dir: &Path,
-) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+pub fn get_dir_list(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let dir_list = std::fs::read_dir(dir)?;
     let mut paths = Vec::new();
 
@@ -58,9 +54,9 @@ pub fn process_path_args(
         if args.recursive && path.is_dir() {
             paths.extend(recursive_read_dir(path)?);
         } else if path.exists() {
-            paths.insert(path.clone());
+            paths.insert(shrink_home(&path));
         } else {
-            new_paths.insert(path.clone());
+            new_paths.insert(shrink_home(&path));
         }
     }
 
@@ -68,18 +64,15 @@ pub fn process_path_args(
         let mut buffer = String::new();
         std::io::stdin().read_to_string(&mut buffer)?;
 
-        let stdin_paths = buffer
-            .lines()
-            .map(PathBuf::from)
-            .collect::<Vec<_>>();
+        let stdin_paths = buffer.lines().map(PathBuf::from).collect::<Vec<_>>();
 
         for path in stdin_paths {
             if args.recursive && path.is_dir() {
                 paths.extend(recursive_read_dir(&path)?);
             } else if path.exists() {
-                paths.insert(path);
+                paths.insert(shrink_home(&path));
             } else {
-                new_paths.insert(path);
+                new_paths.insert(shrink_home(&path));
             }
         }
     } else if args.paths.is_empty() {
@@ -90,13 +83,11 @@ pub fn process_path_args(
         }
     }
 
-    let mut sorted_paths =
-        paths.iter().map(|p| p.clone()).collect::<Vec<PathBuf>>();
+    let mut sorted_paths: Vec<PathBuf> = paths.iter().map(|p| p.clone()).collect();
 
     sorted_paths.sort();
 
-    let mut sorted_new_paths =
-        new_paths.iter().map(|p| p.clone()).collect::<Vec<PathBuf>>();
+    let mut sorted_new_paths: Vec<PathBuf> = new_paths.iter().map(|p| p.clone()).collect();
 
     sorted_new_paths.sort();
 

@@ -4,6 +4,7 @@ mod editor;
 mod fs;
 mod model;
 mod operations;
+mod utils;
 
 use clap::Parser;
 use model::{EditedEntries, Entries};
