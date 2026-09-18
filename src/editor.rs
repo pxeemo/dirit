@@ -7,7 +7,7 @@ use std::{
 use crate::{
     config,
     model::{EditedEntries, Entries},
-    utils::expand_tilde,
+    utils::{expand_tilde, shrink_home},
 };
 
 pub fn create_edit_file(
@@ -25,13 +25,13 @@ pub fn create_edit_file(
             file,
             "{:0width$}\t{}{}",
             id,
-            path.display(),
+            shrink_home(&path).display(),
             if trailing_slash { "/" } else { "" }
         )?;
     }
 
     for path in new_paths {
-        writeln!(file, "{}", path.display())?;
+        writeln!(file, "{}", shrink_home(&path).display())?;
     }
 
     Ok(PathBuf::from(edit_path))

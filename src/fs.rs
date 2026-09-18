@@ -54,9 +54,9 @@ pub fn process_path_args(
         if args.recursive && path.is_dir() {
             paths.extend(recursive_read_dir(path)?);
         } else if path.exists() {
-            paths.insert(shrink_home(&path));
+            paths.insert(path.clone());
         } else {
-            new_paths.insert(shrink_home(&path));
+            new_paths.insert(path.clone());
         }
     }
 
@@ -70,9 +70,9 @@ pub fn process_path_args(
             if args.recursive && path.is_dir() {
                 paths.extend(recursive_read_dir(&path)?);
             } else if path.exists() {
-                paths.insert(shrink_home(&path));
+                paths.insert(path.clone());
             } else {
-                new_paths.insert(shrink_home(&path));
+                new_paths.insert(path);
             }
         }
     } else if args.paths.is_empty() {
