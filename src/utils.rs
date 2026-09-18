@@ -11,9 +11,14 @@ pub fn expand_tilde(path: &str) -> String {
 }
 
 pub fn shrink_home(path: &Path) -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
-    if path.starts_with(&home) {
-        PathBuf::from(path.to_string_lossy().replacen(&home, "~", 1))
+    let home = std::env::var_os("HOME");
+    if let Some(home) = home {
+        let home = Path::new(&home);
+        if let Ok(relative) = path.strip_prefix(home) {
+            PathBuf::from("~").join(relative)
+        } else {
+            path.to_path_buf()
+        }
     } else {
         path.to_path_buf()
     }
