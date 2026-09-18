@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -12,7 +12,7 @@ use crate::{
 
 pub fn create_edit_file(
     entries: &Entries,
-    new_paths: &[PathBuf],
+    new_paths: &BTreeSet<PathBuf>,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let edit_path = std::env::temp_dir().join(format!(".dirit-{}", config::get().puid));
 
@@ -40,7 +40,7 @@ pub fn create_edit_file(
 pub fn parse_edited_entries(edit_path: &Path) -> Result<EditedEntries, Box<dyn std::error::Error>> {
     let contents = std::fs::read_to_string(edit_path)?;
     let mut entries: EditedEntries = BTreeMap::new();
-    let mut paths = HashSet::new();
+    let mut paths = BTreeSet::new();
 
     for line in contents.lines() {
         let (id, path) = match line.split_once('\t') {

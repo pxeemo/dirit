@@ -1,13 +1,13 @@
 use std::{
-    collections::HashSet,
+    collections::BTreeSet,
     io::{IsTerminal, Read},
     path::{Path, PathBuf},
 };
 
 use crate::{cli::Args, utils::shrink_home};
 
-pub fn recursive_read_dir(dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
-    let mut paths = HashSet::new();
+pub fn recursive_read_dir(dir: &Path) -> Result<BTreeSet<PathBuf>, Box<dyn std::error::Error>> {
+    let mut paths = BTreeSet::new();
 
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -46,9 +46,9 @@ pub fn get_dir_list(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Erro
 
 pub fn process_path_args(
     args: &Args,
-) -> Result<(Vec<PathBuf>, Vec<PathBuf>), Box<dyn std::error::Error>> {
-    let mut paths = HashSet::<PathBuf>::new();
-    let mut new_paths = HashSet::<PathBuf>::new();
+) -> Result<(BTreeSet<PathBuf>, BTreeSet<PathBuf>), Box<dyn std::error::Error>> {
+    let mut paths = BTreeSet::<PathBuf>::new();
+    let mut new_paths = BTreeSet::<PathBuf>::new();
 
     for path in &args.paths {
         if args.recursive && path.is_dir() {
@@ -83,13 +83,5 @@ pub fn process_path_args(
         }
     }
 
-    let mut sorted_paths: Vec<PathBuf> = paths.iter().map(|p| p.clone()).collect();
-
-    sorted_paths.sort();
-
-    let mut sorted_new_paths: Vec<PathBuf> = new_paths.iter().map(|p| p.clone()).collect();
-
-    sorted_new_paths.sort();
-
-    Ok((sorted_paths, sorted_new_paths))
+    Ok((paths, new_paths))
 }
