@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{cli::Args, utils::shrink_home};
+use crate::cli::Args;
 
 pub fn recursive_read_dir(dir: &Path) -> Result<BTreeSet<PathBuf>, Box<dyn std::error::Error>> {
     let mut paths = BTreeSet::new();
@@ -20,7 +20,7 @@ pub fn recursive_read_dir(dir: &Path) -> Result<BTreeSet<PathBuf>, Box<dyn std::
 
     for entry in entries {
         let entry = entry?;
-        let path = shrink_home(&entry.path());
+        let path = entry.path();
 
         if path.is_dir() && !path.is_symlink() {
             paths.extend(recursive_read_dir(&path)?);
